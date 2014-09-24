@@ -21,7 +21,7 @@ public class Server extends JFrame {
     private Socket connection;
     private int counter = 1;
 
-    //set up GUI
+    //Constructor: set up GUI
     public Server()
     {
         super("Server");
@@ -47,6 +47,7 @@ public class Server extends JFrame {
         setVisible(true);
     }
 
+    //Most important method: run the server
     public void runServer() {
         try {
             //Step 1: Create a ServerSocket
