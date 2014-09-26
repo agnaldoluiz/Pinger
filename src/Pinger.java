@@ -50,7 +50,12 @@ public class Pinger {
 
                 //UDP Socket
                 DatagramSocket socket = new DatagramSocket();
-                InetAddress ipAdress = InetAddress.getByName(serverName);
+                InetAddress ipAddress = InetAddress.getByName(serverName);
+
+                //Counter for received packets
+                int received = 0;
+                //Array for rrt
+                long[] rrtArray = new long[Integer.parseInt(cmd.getOptionValue("c"))];
 
                 //Loop
                 for(int sequence = 1; sequence <= Integer.parseInt(cmd.getOptionValue("c")); sequence++) {
@@ -66,7 +71,7 @@ public class Pinger {
                         bytes[j] = sendTimeByteArray[i];
                     }
 
-                    DatagramPacket request = new DatagramPacket(bytes, bytes.length, ipAdress,port);
+                    DatagramPacket request = new DatagramPacket(bytes, bytes.length, ipAddress,port);
                     socket.send(request);
                     DatagramPacket reply = new DatagramPacket(new byte[12], 12);
 
@@ -74,10 +79,44 @@ public class Pinger {
 
                     try {
                         socket.receive(reply);
-                        printData(reply);
+
+                        // Obtain references to the packet's array of bytes.
+                        byte[] buf = request.getData();
+
+                        byte[] counterByteArray = new byte[4];
+                        byte[] timeByteArray = new byte[8];
+
+                        for(int i = 0; i < 4; i ++) {
+                            counterByteArray[i] = buf[i];
+                        }
+                        for(int i = 0, j = 4; i < 8; i++, j++) {
+                            timeByteArray[i] = buf[j];
+                        }
+
+                        ByteBuffer counterBuffer = ByteBuffer.allocate(Integer.BYTES);
+                        counterBuffer.put(counterByteArray).flip();
+                        int count = counterBuffer.getInt();
+
+                        ByteBuffer timeBuffer = ByteBuffer.allocate(Long.BYTES);
+                        timeBuffer.put(timeByteArray).flip();
+                        long time = timeBuffer.getLong();
+                        long rrt = System.currentTimeMillis() - time;
+                        rrtArray[sequence-1] = rrt;
+                        // Print host address and data received from it.
+                        System.out.println("size=" + buf.length + " from=" + serverName + " seq=" + count + " rrt=" + rrt + " ms");
+                        received++;
                     }
                     catch (IOException E) {}
+
+                    Thread.sleep(1000);
                 }
+
+                double lost = (1 - received/Double.parseDouble(cmd.getOptionValue("c")))*100;
+                long rrtMin = rrtMinimum(rrtArray);
+                double rrtAvg = rrtAverage(rrtArray);
+                long rrtMax = rrtMaximum(rrtArray);
+                System.out.println("*************************************************");
+                System.out.println("sent=" + cmd.getOptionValue("c") + " received=" + received + " lost=" + lost + "% rrt min/avg/max=" + rrtMin+"/"+rrtAvg+"/"+rrtMax);
 
             }
 
@@ -90,14 +129,13 @@ public class Pinger {
                 while(true) {
                     DatagramPacket request = new DatagramPacket(new byte[1024], 1024);
                     socket.receive(request);
+                    printDataServer(request);
 
                     InetAddress clientHost = request.getAddress();
                     int clientPort = request.getPort();
                     byte[] buf = request.getData();
                     DatagramPacket reply = new DatagramPacket(buf, buf.length, clientHost, clientPort);
                     socket.send(reply);
-
-                    System.out.println("Reply Sent");
                 }
             }
 
@@ -111,7 +149,7 @@ public class Pinger {
         }
     }
 
-    private static void printData(DatagramPacket request) throws Exception {
+    private static void printDataServer(DatagramPacket request) throws Exception {
         // Obtain references to the packet's array of bytes.
         byte[] buf = request.getData();
 
@@ -134,6 +172,36 @@ public class Pinger {
         long time = timeBuffer.getLong();
 
         // Print host address and data received from it.
-        System.out.println(count + "" + time);
+        System.out.println(count + " " + time);
     }
+
+    private static long rrtMinimum(long[] rrtArray) {
+        long minValue = rrtArray[0];
+        for(int i=1;i<rrtArray.length;i++){
+            if(rrtArray[i] < minValue){
+                minValue = rrtArray[i];
+            }
+        }
+        return minValue;
+    }
+
+    private static long rrtMaximum(long[] rrtArray){
+        long maxValue = rrtArray[0];
+        for(int i=1;i < rrtArray.length;i++){
+            if(rrtArray[i] > maxValue){
+                maxValue = rrtArray[i];
+            }
+        }
+        return maxValue;
+    }
+
+    private static double rrtAverage(long[] rrtArray) {
+        long sum = 0;
+
+        for(long rrt : rrtArray) {
+            sum = sum + rrt;
+        }
+        return (double)sum / rrtArray.length;
+    }
+
 }
