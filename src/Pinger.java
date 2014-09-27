@@ -9,15 +9,11 @@
  *   -c <packet count>
  */
 
-import java.io.BufferedReader;
-import java.io.ByteArrayInputStream;
 import java.io.IOException;
-import java.io.InputStreamReader;
 import java.net.DatagramPacket;
 import java.net.DatagramSocket;
 import java.net.InetAddress;
 import java.nio.ByteBuffer;
-import java.text.ParseException;
 import org.apache.commons.cli.BasicParser;
 import org.apache.commons.cli.Option;
 import org.apache.commons.cli.Options;
@@ -27,6 +23,7 @@ import org.apache.commons.cli.CommandLine;
 public class Pinger {
 
     public static void main(String [] args) throws Exception {
+        //Options for the command line
         Options options = new Options();
         Option optLocalPort = new Option("l", true, "Local Port");
         Option optHost = new Option("h", true, "Remote Hostname");
@@ -59,6 +56,7 @@ public class Pinger {
 
                 //Loop
                 for(int sequence = 1; sequence <= Integer.parseInt(cmd.getOptionValue("c")); sequence++) {
+                    //Make the packages
                     long sendTime = System.currentTimeMillis();
                     byte[] sequenceByteArray = ByteBuffer.allocate(4).putInt(sequence).array();
                     byte[] sendTimeByteArray = ByteBuffer.allocate(8).putLong(sendTime).array();
@@ -71,12 +69,14 @@ public class Pinger {
                         bytes[j] = sendTimeByteArray[i];
                     }
 
+                    //Sending the packets
                     DatagramPacket request = new DatagramPacket(bytes, bytes.length, ipAddress,port);
                     socket.send(request);
                     DatagramPacket reply = new DatagramPacket(new byte[12], 12);
-
+                    //Wait up to a second to get an answer
                     socket.setSoTimeout(1000);
 
+                    //Receive the packets from the server and print the data
                     try {
                         socket.receive(reply);
 
@@ -107,7 +107,7 @@ public class Pinger {
                         received++;
                     }
                     catch (IOException E) {}
-
+                    //Wait one second to send another one
                     Thread.sleep(1000);
                 }
 
@@ -123,15 +123,17 @@ public class Pinger {
             //SERVER MODE
             else if(cmd.hasOption("l")) {
                 int port = Integer.parseInt(cmd.getOptionValue("l"));
-
+                //Create socket and set counter
                 DatagramSocket socket = new DatagramSocket(port);
+                int counter = 0;
 
                 while(true) {
                     DatagramPacket request = new DatagramPacket(new byte[1024], 1024);
                     socket.receive(request);
-                    printDataServer(request);
-
+                    long time = System.currentTimeMillis();
+                    counter++;
                     InetAddress clientHost = request.getAddress();
+                    printDataServer(time, counter, clientHost);
                     int clientPort = request.getPort();
                     byte[] buf = request.getData();
                     DatagramPacket reply = new DatagramPacket(buf, buf.length, clientHost, clientPort);
@@ -149,32 +151,12 @@ public class Pinger {
         }
     }
 
-    private static void printDataServer(DatagramPacket request) throws Exception {
-        // Obtain references to the packet's array of bytes.
-        byte[] buf = request.getData();
-
-        byte[] counterByteArray = new byte[4];
-        byte[] timeByteArray = new byte[8];
-
-        for(int i = 0; i < 4; i ++) {
-            counterByteArray[i] = buf[i];
-        }
-        for(int i = 0, j = 4; i < 8; i++, j++) {
-            timeByteArray[i] = buf[j];
-        }
-
-        ByteBuffer counterBuffer = ByteBuffer.allocate(Integer.BYTES);
-        counterBuffer.put(counterByteArray).flip();
-        int count = counterBuffer.getInt();
-
-        ByteBuffer timeBuffer = ByteBuffer.allocate(Long.BYTES);
-        timeBuffer.put(timeByteArray).flip();
-        long time = timeBuffer.getLong();
-
+    private static void printDataServer(long time, int counter, InetAddress clientHost) throws Exception {
         // Print host address and data received from it.
-        System.out.println(count + " " + time);
+        System.out.println("time=" + time + " from=" + clientHost + " seq=" + counter );
     }
 
+    //Useful methods
     private static long rrtMinimum(long[] rrtArray) {
         long minValue = rrtArray[0];
         for(int i=1;i<rrtArray.length;i++){
@@ -203,5 +185,4 @@ public class Pinger {
         }
         return (double)sum / rrtArray.length;
     }
-
 }
